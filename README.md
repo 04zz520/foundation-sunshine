@@ -1,3 +1,5 @@
+> **04zz520 个人修复 Fork（非官方发行）**：维护分支为 `custom`，Windows DPI 档位映射修复与验证状态见 [CUSTOM.md](CUSTOM.md)。当前源码修复尚未部署到运行电脑，不要把未测试构建作为稳定版安装。下方保留上游项目介绍和署名。
+
 <div align="center">
 
 <img src="docs/poster.webp" width="800" alt="Foundation Sunshine">

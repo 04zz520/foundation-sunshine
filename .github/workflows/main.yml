@@ -1,20 +1,13 @@
-name: Build and Release
+name: Build custom Sunshine (manual, unsigned)
 
 # Published releases are owned by sign-and-repackage.yml. Keeping that event
 # out of this workflow prevents a release created below from starting another
 # build-and-release cycle.
 on:
-  pull_request:
-    branches:
-      - master
-    types:
-      - opened
-      - synchronize
-      - reopened
-  push:
-    branches:
-      - master
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: '${{ github.workflow }}-${{ github.ref }}'
@@ -36,7 +29,7 @@ jobs:
       release_tag: ${{ steps.setup_release_auto.outputs.release_tag || steps.setup_release_manual.outputs.release_tag }}
       release_version: ${{ steps.setup_release_auto.outputs.release_version || steps.setup_release_manual.outputs.release_version }}
     permissions:
-      contents: write  # read does not work to check squash and merge details
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -211,7 +204,7 @@ jobs:
           # downloads (vmouse) may fail. Downgrade missing drivers from
           # FATAL_ERROR to WARNING so the build/configure still succeeds; the
           # affected drivers are simply excluded from the installer.
-          DRIVER_DEPS_REQUIRED: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && 'OFF' || 'ON' }}
+          DRIVER_DEPS_REQUIRED: 'OFF'
         run: |
           mkdir -p build
           ccache --zero-stats
