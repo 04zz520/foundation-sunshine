@@ -25,8 +25,10 @@ namespace display_device::w_utils {
 
   namespace {
 
-    constexpr std::array<int, 16> DISPLAY_SCALE_PERCENT_VALUES {
-      100, 120, 125, 140, 150, 160, 175, 180, 200, 225, 250, 300, 350, 400, 450, 500
+    // DISPLAYCONFIG_DEVICE_INFO_{GET,SET}_DPI_SCALE use desktop scale indices.
+    // Inserting phone-specific 120/140/160/180 steps shifts every subsequent DPI.
+    constexpr std::array<int, 12> DISPLAY_SCALE_PERCENT_VALUES {
+      100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500
     };
 
     constexpr auto DISPLAYCONFIG_DEVICE_INFO_GET_DPI_SCALE {
