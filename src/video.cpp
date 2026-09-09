@@ -4270,14 +4270,17 @@ namespace video {
     auto encoder_list = encoders;
 
     // A configured display target used to force a full validation on every
-    // launch. Reuse the result when the target is identical and DXGI confirms
-    // the GPU/output set has not changed. A recreated VDD, driver update, eGPU
-    // change, target change, or ALWAYS_REPROBE encoder still invalidates this
-    // cache and takes the original full validation path.
+    // launch. Reuse the result when the target is identical and the platform
+    // confirms that the GPU adapter set has not changed. The generic startup
+    // probe may also cover the first VDD-compatible launch: encoder capability
+    // is adapter-wide, while actual capture/encode initialization still fails
+    // closed later if the prepared VDD cannot be used.
     const bool target_matches_previous = target && last_successful_probe_target &&
                                          target->output_name == last_successful_probe_target->output_name &&
                                          target->policy == last_successful_probe_target->policy;
-    const bool cache_can_cover_request = !target || target_matches_previous;
+    const bool startup_probe_covers_vdd = target && !last_successful_probe_target &&
+                                          target->policy == probe_target_policy_e::vdd_compatible;
+    const bool cache_can_cover_request = !target || target_matches_previous || startup_probe_covers_vdd;
     if (cache_can_cover_request && chosen_encoder && !(chosen_encoder->flags & ALWAYS_REPROBE) &&
         !platf::needs_encoder_reenumeration()) {
       BOOST_LOG(info) << "Using cached encoder validation results"

@@ -35,6 +35,8 @@ namespace platf::vulkan_hdr_bridge {
     std::mutex state_mutex;
     bool registered = false;
     bool cleanup_pending = false;
+    bool validation_cached = false;
+    std::wstring validated_display;
     std::string current_state = "idle";
     std::string current_message = "Waiting for an HDR VDD stream.";
 
@@ -362,9 +364,18 @@ namespace platf::vulkan_hdr_bridge {
         set_status("error", "No active Zako HDR display was found.");
         return false;
       }
-      if (!run_probe(probe, display)) {
-        set_status("error", "Vulkan HDR presentation validation failed. The stream continues without the workaround.");
-        return false;
+      if (!validation_cached || validated_display != display) {
+        if (!run_probe(probe, display)) {
+          validation_cached = false;
+          validated_display.clear();
+          set_status("error", "Vulkan HDR presentation validation failed. The stream continues without the workaround.");
+          return false;
+        }
+        validation_cached = true;
+        validated_display = display;
+      }
+      else {
+        BOOST_LOG(info) << "Vulkan HDR bridge: reusing validation cached for this Sunshine service session";
       }
       if (!register_user_manifest(probe, manifest)) {
         cleanup_registrations();
@@ -383,6 +394,8 @@ namespace platf::vulkan_hdr_bridge {
   startup_cleanup() {
     std::lock_guard lock(state_mutex);
     const bool cleaned = cleanup_registrations();
+    validation_cached = false;
+    validated_display.clear();
     set_status(cleaned ? "idle" : "error",
       cleaned ? "Waiting for an HDR VDD stream." : "Could not clean a stale Vulkan layer registration.");
   }
@@ -428,9 +441,13 @@ namespace platf::vulkan_hdr_bridge {
   shutdown_cleanup() {
     std::lock_guard lock(state_mutex);
     if (!registered && !cleanup_pending) {
+      validation_cached = false;
+      validated_display.clear();
       return;
     }
     cleanup_registrations(false);
+    validation_cached = false;
+    validated_display.clear();
   }
 
   status_t

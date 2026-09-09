@@ -1,6 +1,7 @@
 #include "stream_profile.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -21,6 +22,7 @@
 #include "rtsp.h"
 
 #ifdef _WIN32
+  #include "display_device/display_device.h"
   #include "platform/windows/display_device/windows_utils.h"
 #endif
 
@@ -116,6 +118,59 @@ namespace stream_profile {
     }
 
 #ifdef _WIN32
+    std::string
+    lowercase_ascii(std::string value) {
+      std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+      });
+      return value;
+    }
+
+    display_device::w_utils::set_display_scale_result_t
+    set_stream_display_scale(const std::string &configured_device_id,
+      const std::string &configured_friendly_name,
+      int scale_percent,
+      int timeout_ms) {
+      const auto resolved_output_name = display_device::get_display_name(config::video.output_name);
+      const auto friendly_name = lowercase_ascii(configured_friendly_name);
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+
+      display_device::w_utils::set_display_scale_result_t result;
+      result.error = display_device::w_utils::display_scale_error_e::display_not_found;
+      result.message = "Stream display not found";
+
+      do {
+        const auto displays = display_device::w_utils::list_display_scale_info();
+        const auto target = std::find_if(displays.begin(), displays.end(), [&](const auto &display) {
+          if (!configured_device_id.empty() && lowercase_ascii(display.device_id) == lowercase_ascii(configured_device_id)) {
+            return true;
+          }
+          if (!resolved_output_name.empty() && lowercase_ascii(display.display_name) == lowercase_ascii(resolved_output_name)) {
+            return true;
+          }
+          const auto current_friendly_name = lowercase_ascii(display.friendly_name);
+          return display.is_primary &&
+                 ((!friendly_name.empty() && current_friendly_name == friendly_name) ||
+                   current_friendly_name.find("zako") != std::string::npos);
+        });
+        if (target != displays.end()) {
+          BOOST_LOG(info) << "Integrated stream profile resolved DPI target: "
+                          << target->display_name << " / " << target->friendly_name;
+          return display_device::w_utils::set_display_scale(
+            target->display_name,
+            target->device_id,
+            scale_percent);
+        }
+
+        if (std::chrono::steady_clock::now() >= deadline) {
+          break;
+        }
+        std::this_thread::sleep_for(50ms);
+      } while (true);
+
+      return result;
+    }
+
     bool
     restore_layout_in_user_session(const rtsp_stream::launch_session_t &session,
                                    const std::filesystem::path &root,
@@ -187,6 +242,7 @@ namespace stream_profile {
       const auto key = resolution_key(session.width, session.height);
       const int dpi = configured_dpi(settings, key, session.width, session.height);
       const auto virtual_device_id = settings.value("VirtualAdapterDeviceId", std::string { "Root\\ZakoVDD" });
+      const auto virtual_friendly_name = settings.value("VirtualDisplayFriendlyName", std::string { "Zako HDR" });
 
       // Publish lifecycle state before changing the desktop. If any later
       // cosmetic step fails, the existing Undo command can still restore the
@@ -212,7 +268,12 @@ namespace stream_profile {
         return false;
       }
 
-      const auto scale_result = display_device::w_utils::set_display_scale({}, virtual_device_id, dpi);
+      const int target_ready_timeout_ms = std::clamp(settings.value("DpiTargetReadyTimeoutMs", 750), 0, 2000);
+      const auto scale_result = set_stream_display_scale(
+        virtual_device_id,
+        virtual_friendly_name,
+        dpi,
+        target_ready_timeout_ms);
       if (!scale_result.success) {
         BOOST_LOG(warning) << "Integrated stream profile failed to apply " << dpi
                            << "% DPI for " << key << ": " << scale_result.message;
@@ -220,7 +281,9 @@ namespace stream_profile {
       }
 
       const int settle_delay_ms = std::clamp(settings.value("DpiSettleDelayMs", 250), 0, 2000);
-      if (settle_delay_ms > 0) {
+      const bool scale_changed = !scale_result.previous_scale_percent ||
+                                 *scale_result.previous_scale_percent != dpi;
+      if (scale_changed && settle_delay_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(settle_delay_ms));
       }
 

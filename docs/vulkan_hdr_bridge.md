@@ -17,6 +17,12 @@ that both uses ZakoVDD and requests HDR:
    interactive user's 64-bit `HKCU` Vulkan implicit-layer registry; and
 5. stream restore, normal shutdown, and next-start recovery remove the value.
 
+A successful presentation validation is retained in memory for the lifetime of
+the Sunshine service and for the same active Zako display. Later HDR sessions
+still register and unregister the per-user implicit layer with the stream
+lifecycle, but skip the expensive presentation probe. A service restart,
+display identity change, or failed probe clears the warm validation state.
+
 The layer is a pass-through unless the Win32 surface belongs to an active HDR
 Zako display and the cache contains both HDR-active validation and a successful
 present. It only appends missing complete `(format, colorSpace)` pairs.

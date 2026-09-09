@@ -1367,8 +1367,62 @@ namespace platf {
     static std::mutex reenumeration_state_lock;
     auto lg = std::lock_guard(reenumeration_state_lock);
 
+    struct adapter_signature_t {
+      LUID luid {};
+      UINT vendor_id {};
+      UINT device_id {};
+      UINT subsystem_id {};
+      UINT revision {};
+      UINT flags {};
+
+      bool
+      operator==(const adapter_signature_t &other) const {
+        return luid.HighPart == other.luid.HighPart &&
+               luid.LowPart == other.luid.LowPart &&
+               vendor_id == other.vendor_id &&
+               device_id == other.device_id &&
+               subsystem_id == other.subsystem_id &&
+               revision == other.revision &&
+               flags == other.flags;
+      }
+    };
+
+    const auto adapter_signature = [](dxgi::factory1_t &source_factory) {
+      std::vector<adapter_signature_t> signature;
+      for (UINT index = 0;; ++index) {
+        dxgi::adapter_t::pointer adapter_p = nullptr;
+        const auto enum_status = source_factory->EnumAdapters1(index, &adapter_p);
+        if (enum_status == DXGI_ERROR_NOT_FOUND) {
+          break;
+        }
+        if (FAILED(enum_status) || !adapter_p) {
+          return std::vector<adapter_signature_t> {};
+        }
+        dxgi::adapter_t adapter { adapter_p };
+        DXGI_ADAPTER_DESC1 desc {};
+        if (FAILED(adapter->GetDesc1(&desc))) {
+          return std::vector<adapter_signature_t> {};
+        }
+        signature.push_back({
+          desc.AdapterLuid,
+          desc.VendorId,
+          desc.DeviceId,
+          desc.SubSysId,
+          desc.Revision,
+          desc.Flags,
+        });
+      }
+      std::ranges::sort(signature, [](const auto &left, const auto &right) {
+        if (left.luid.HighPart != right.luid.HighPart) return left.luid.HighPart < right.luid.HighPart;
+        return left.luid.LowPart < right.luid.LowPart;
+      });
+      return signature;
+    };
+
     // Keep a reference to the DXGI factory, which will keep track of changes internally.
     static dxgi::factory1_t factory;
+    static std::vector<adapter_signature_t> previous_adapter_signature;
+    static bool signature_initialized = false;
     if (!factory || !factory->IsCurrent()) {
       factory.reset();
 
@@ -1376,12 +1430,33 @@ namespace platf {
       if (FAILED(status)) {
         BOOST_LOG(error) << "Failed to create DXGIFactory1 [0x"sv << util::hex(status).to_string_view() << ']';
         factory.release();
+        signature_initialized = false;
+        previous_adapter_signature.clear();
+        BOOST_LOG(info) << "Encoder reenumeration is required"sv;
+        return true;
       }
 
-      // Always request reenumeration on the first streaming session just to ensure we
-      // can deal with any initialization races that may occur when the system is booting.
-      BOOST_LOG(info) << "Encoder reenumeration is required"sv;
-      return true;
+      auto current_adapter_signature = adapter_signature(factory);
+      const bool signature_available = !current_adapter_signature.empty();
+      const bool adapters_changed = !signature_initialized || !signature_available ||
+                                    current_adapter_signature != previous_adapter_signature;
+      if (signature_available) {
+        previous_adapter_signature = std::move(current_adapter_signature);
+        signature_initialized = true;
+      }
+
+      if (adapters_changed) {
+        // The first call, a GPU reset, an eGPU change, or a driver transition must
+        // retain the conservative full validation path.
+        BOOST_LOG(info) << "Encoder reenumeration is required"sv;
+        return true;
+      }
+
+      // DXGI also invalidates factories for ordinary output topology, mode, and
+      // HDR changes. Those are expected for every VDD session and do not change
+      // the GPU encoder capabilities represented by the cached validation.
+      BOOST_LOG(info) << "DXGI display state changed but GPU adapters are unchanged; keeping cached encoder validation"sv;
+      return false;
     }
     else {
       // The DXGI factory from last time is still current, so no encoder changes have occurred.
