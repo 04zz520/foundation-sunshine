@@ -453,7 +453,13 @@ namespace display_device {
     // 在创建 VDD 可能使 Windows 自动激活显示器、Sunshine 应用目标布局之前保存拓扑。
     boost::optional<active_topology_t> pre_saved_initial_topology = pending_vdd_.initial_topology;
     if (should_prepare_vdd) {
-      const bool vdd_already_exists = !display_device::find_device_by_friendlyname(ZAKO_NAME).empty();
+      const auto existing_vdd_id = display_device::find_device_by_friendlyname(ZAKO_NAME);
+      const bool vdd_already_exists = !existing_vdd_id.empty();
+      const auto devices_before_vdd = display_device::enum_available_devices();
+      const auto existing_vdd = devices_before_vdd.find(existing_vdd_id);
+      const bool vdd_already_active = existing_vdd != devices_before_vdd.end() &&
+                                      (existing_vdd->second.device_state == device_state_e::active ||
+                                       existing_vdd->second.device_state == device_state_e::primary);
       if (will_disable_physical_displays) {
         settings.capture_audio_sink();
       }
@@ -464,10 +470,13 @@ namespace display_device {
                               "有待恢复的设置，保留原有初始拓扑");
         cancel_pending_display_retry();
       }
-      else if (vdd_already_exists) {
-        BOOST_LOG(debug) << "VDD already exists, skipping initial topology save (topology may be corrupted)";
+      else if (vdd_already_active) {
+        BOOST_LOG(debug) << "VDD is already active, skipping initial topology save (topology may be a stream topology)";
       }
       else if (!is_system_rdp_vdd_session) {
+        if (vdd_already_exists) {
+          BOOST_LOG(info) << "VDD exists but is inactive; saving the current physical topology before activating it";
+        }
         pending_vdd_.initial_topology = get_current_topology();
         pre_saved_initial_topology = pending_vdd_.initial_topology;
         BOOST_LOG(debug) << "Pre-saved initial topology before VDD creation: " << to_string(*pre_saved_initial_topology);
