@@ -4024,15 +4024,11 @@ namespace stream {
 
         // If this is the last non-control-only session, invoke the platform callbacks
         if (unregister_video_session() == 0) {
-          bool restore_display_state { true };
           if (proc::proc.running()) {
             tray_state::set_paused(proc::proc.get_last_run_app_name());
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
             system_tray::update_tray_pausing(proc::proc.get_last_run_app_name());
 #endif
-
-            // TODO: make this configurable per app
-            restore_display_state = false;
           }
           else {
             tray_state::set_idle(proc::proc.get_last_run_app_name());
@@ -4041,9 +4037,13 @@ namespace stream {
 #endif
           }
 
-          if (restore_display_state) {
-            display_device::session_t::get().restore_state();
-          }
+          // The display topology belongs to the video session, not the
+          // application lifetime. In VDD display-off mode an application can
+          // intentionally outlive Moonlight (or be represented by a detached
+          // launcher). Deferring the restore in that case leaves the physical
+          // desktop disabled and lets app Undo commands race the topology
+          // recovery. Restore synchronously before any app cleanup can run.
+          display_device::session_t::get().restore_state();
 
           platf::streaming_will_stop();
         }
