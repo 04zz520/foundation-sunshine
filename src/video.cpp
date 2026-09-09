@@ -73,6 +73,18 @@ namespace video {
       return std::nullopt;
     }
 
+#ifdef _WIN32
+    bool
+    configured_vdd_is_active() {
+      const auto devices { display_device::enum_available_devices() };
+      return std::any_of(std::begin(devices), std::end(devices), [](const auto &device) {
+        return device.second.friendly_name == ZAKO_NAME &&
+               (device.second.device_state == display_device::device_state_e::active ||
+                device.second.device_state == display_device::device_state_e::primary);
+      });
+    }
+#endif
+
     /**
      * @brief Check if we can allow probing for the encoders.
      * @return True if there should be no issues with the probing, false if we should prevent it.
@@ -4290,7 +4302,19 @@ namespace video {
     }
 
     const auto probe_capture_override = capture_override_for_encoder_probe();
-    const auto configured_output_name = target ? target->output_name : config::video.output_name;
+    auto configured_output_name = target ? target->output_name : config::video.output_name;
+#ifdef _WIN32
+    // At service startup the configured VDD can still exist in Windows' inactive
+    // device list. Passing its stale DISPLAY name to NVENC makes the first
+    // capability probe fail, which in turn causes Moonlight to believe HDR is
+    // unavailable. Probe an available physical output for this startup-only
+    // capability check; the normal per-session VDD initialization remains
+    // responsible for validating the actual stream target.
+    if (!target && configured_output_name == VDD_NAME && !configured_vdd_is_active()) {
+      BOOST_LOG(info) << "Configured VDD is not active during startup; probing encoder capabilities on an available physical display"sv;
+      configured_output_name.clear();
+    }
+#endif
     const bool target_requires_exact_resolution = target && target->policy == probe_target_policy_e::exact;
     const auto configured_display_name = display_device::get_display_name(configured_output_name);
     if (target_requires_exact_resolution && configured_display_name.empty()) {
