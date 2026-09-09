@@ -1,10 +1,13 @@
-name: Build custom Sunshine (manual, unsigned)
+name: Build custom Sunshine (unsigned)
 
 # Published releases are owned by sign-and-repackage.yml. Keeping that event
 # out of this workflow prevents a release created below from starting another
 # build-and-release cycle.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - custom
 
 permissions:
   contents: read
@@ -37,14 +40,14 @@ jobs:
 
       - name: Setup Release (Auto)
         id: setup_release_auto
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name != 'workflow_dispatch' && github.event_name != 'push'
         uses: LizardByte/setup-release-action@v2025.426.225
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Release (Manual)
         id: setup_release_manual
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         run: |
           SUFFIX=$([ "${{ github.ref_name }}" = "master" ] && echo "" || echo "-dev")
           echo "publish_release=false" >> $GITHUB_OUTPUT
