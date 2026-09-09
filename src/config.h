@@ -280,6 +280,9 @@ namespace config {
     bool notify_pre_releases;
     bool system_tray;
     std::vector<prep_cmd_t> prep_cmds;
+    // Optional integrated Windows stream profile. An empty path disables it.
+    // The JSON schema is compatible with the existing sunshine-display-settings.json.
+    std::string stream_profile_settings_path;
   };
 
   extern video_t video;

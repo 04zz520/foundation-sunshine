@@ -16,6 +16,7 @@ install(TARGETS audio-info RUNTIME DESTINATION "tools" COMPONENT audio)
 install(TARGETS sunshinesvc RUNTIME DESTINATION "tools" COMPONENT application)
 install(TARGETS qiin-tabtip RUNTIME DESTINATION "tools" COMPONENT application)
 install(TARGETS stylus-input-probe RUNTIME DESTINATION "tools" COMPONENT application)
+install(TARGETS SunshineStreamLayout RUNTIME DESTINATION "tools" COMPONENT application)
 
 # The optional self-contained runtime is a separate release asset. The main
 # package carries only its pinned download manifest, keeping the feature

@@ -1622,6 +1622,7 @@ namespace video {
   };
 
   static encoder_t *chosen_encoder;
+  static std::optional<probe_target_t> last_successful_probe_target;
   static std::atomic<const encoder_t *> active_encoder_for_status { nullptr };
   int active_hevc_mode;
   int active_av1_mode;
@@ -4268,9 +4269,19 @@ namespace video {
     }
     auto encoder_list = encoders;
 
-    // If we already have a good encoder, check to see if another probe is required
-    if (!target && chosen_encoder && !(chosen_encoder->flags & ALWAYS_REPROBE) && !platf::needs_encoder_reenumeration()) {
-      BOOST_LOG(info) << "Using cached encoder validation results";
+    // A configured display target used to force a full validation on every
+    // launch. Reuse the result when the target is identical and DXGI confirms
+    // the GPU/output set has not changed. A recreated VDD, driver update, eGPU
+    // change, target change, or ALWAYS_REPROBE encoder still invalidates this
+    // cache and takes the original full validation path.
+    const bool target_matches_previous = target && last_successful_probe_target &&
+                                         target->output_name == last_successful_probe_target->output_name &&
+                                         target->policy == last_successful_probe_target->policy;
+    const bool cache_can_cover_request = !target || target_matches_previous;
+    if (cache_can_cover_request && chosen_encoder && !(chosen_encoder->flags & ALWAYS_REPROBE) &&
+        !platf::needs_encoder_reenumeration()) {
+      BOOST_LOG(info) << "Using cached encoder validation results"
+                      << (target ? " for unchanged capture target" : "");
       active_encoder_for_status.store(chosen_encoder, std::memory_order_release);
       return 0;
     }
@@ -4507,6 +4518,7 @@ namespace video {
                                                        encoder.hevc[encoder_t::YUV444];
     last_encoder_probe_supported_yuv444_for_codec[2] = encoder.av1[encoder_t::PASSED] &&
                                                        encoder.av1[encoder_t::YUV444];
+    last_successful_probe_target = target;
 
     BOOST_LOG(debug) << "------  h264 ------"sv;
     for (int x = 0; x < encoder_t::MAX_FLAGS; ++x) {
@@ -4545,6 +4557,11 @@ namespace video {
     if (active_av1_mode == 0) {
       active_av1_mode = encoder.av1[encoder_t::PASSED] ? (encoder.av1[encoder_t::DYNAMIC_RANGE] ? 3 : 2) : 1;
     }
+
+    // Arm the platform change detector at the state that was just validated.
+    // Without this baseline, the first identical launch after a full probe is
+    // conservatively reported as unknown and performs another full probe.
+    (void) platf::needs_encoder_reenumeration();
 
     return 0;
   }

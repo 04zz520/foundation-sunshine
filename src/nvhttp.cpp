@@ -64,6 +64,7 @@
 #include "process.h"
 #include "rtsp.h"
 #include "stream.h"
+#include "stream_profile.h"
 #include "tray/system_tray.h"
 #include "utility.h"
 #include "uuid.h"
@@ -691,6 +692,14 @@ namespace nvhttp {
     }
 
     if (appid > 0) {
+      // Apply the per-resolution desktop profile after Sunshine has finished
+      // configuring the capture display, but before the application and RTSP
+      // session become visible to the client. Fail open so a desktop stream is
+      // never made unavailable by a cosmetic DPI/layout failure.
+      if (!stream_profile::apply_launch(*launch_session)) {
+        BOOST_LOG(warning) << "Integrated stream profile could not be applied; continuing with the current desktop scale/layout"sv;
+      }
+
       auto err = proc::proc.execute(appid, launch_session);
       if (err) {
         tree.put("root.<xmlattr>.status_code", err);

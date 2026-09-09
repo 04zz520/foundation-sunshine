@@ -588,6 +588,7 @@ namespace config {
     false,  // notify_pre_releases
     true,  // system_tray
     {},  // prep commands
+    {},  // integrated stream profile settings path (disabled by default)
   };
 
   bool
@@ -1570,6 +1571,7 @@ namespace config {
     bool_f(vars, "notify_pre_releases", sunshine.notify_pre_releases);
 
     bool_f(vars, "system_tray", sunshine.system_tray);
+    string_f(vars, "stream_profile_settings_path", sunshine.stream_profile_settings_path);
 
     int port = sunshine.port;
     int_between_f(vars, "port"s, port, { 1024 + nvhttp::PORT_HTTPS, 65535 - rtsp_stream::RTSP_SETUP_PORT });
@@ -1919,6 +1921,7 @@ namespace config {
         "vdd_keep_enabled",       // 由系统托盘控制，不通过Web UI修改
         "vdd_headless_create",    // 由系统托盘控制，不通过Web UI修改
         "tray_locale",            // 由系统托盘控制，不通过Web UI修改
+        "stream_profile_settings_path",  // Personal integrated lifecycle; not exposed by Web UI
       };
 
       // 读取现有配置文件（用于获取受保护字段的值和后续对比）

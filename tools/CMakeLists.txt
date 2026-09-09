@@ -67,6 +67,19 @@ target_compile_options(test_args PRIVATE ${SUNSHINE_COMPILE_OPTIONS})
 # 注意：不会在 cmake/packaging/windows.cmake 中安装，所以不会被打包
 
 if(WIN32)
+    add_executable(SunshineStreamLayout stream_layout.cpp)
+    set_target_properties(SunshineStreamLayout PROPERTIES
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON)
+    target_compile_definitions(SunshineStreamLayout PRIVATE UNICODE _UNICODE)
+    target_link_libraries(SunshineStreamLayout
+            user32
+            nlohmann_json::nlohmann_json)
+    target_compile_options(SunshineStreamLayout PRIVATE ${SUNSHINE_COMPILE_OPTIONS})
+    if(MINGW)
+        target_link_options(SunshineStreamLayout PRIVATE -municode -s -Wl,--gc-sections)
+    endif()
+
     add_executable(stylus-input-probe WIN32
             stylus_input_probe.cpp)
     set_target_properties(stylus-input-probe PROPERTIES
