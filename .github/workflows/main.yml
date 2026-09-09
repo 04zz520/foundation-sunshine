@@ -244,11 +244,19 @@ jobs:
         if: steps.inno-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          # Download and install Inno Setup 6 (silent install)
-          $url = "https://jrsoftware.org/download.php/is.exe"
+          $ErrorActionPreference = 'Stop'
+          # Use the direct files endpoint. The download.php redirect is
+          # occasionally rejected by GitHub-hosted Windows runners.
+          $url = "https://files.jrsoftware.org/is/6/innosetup-6.4.3.exe"
           $installer = "$env:TEMP\innosetup.exe"
-          Invoke-WebRequest -Uri $url -OutFile $installer
+          Invoke-WebRequest -Uri $url -OutFile $installer -UserAgent 'Sunshine-GitHub-Actions'
+          if ((Get-Item -LiteralPath $installer).Length -lt 1MB) {
+            throw "Downloaded Inno Setup payload is unexpectedly small"
+          }
           Start-Process -FilePath $installer -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-' -Wait
+          if (-not (Test-Path -LiteralPath 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe')) {
+            throw "Inno Setup installation completed without ISCC.exe"
+          }
 
       - name: Add Inno Setup to PATH
         shell: pwsh
